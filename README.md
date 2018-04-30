@@ -4,11 +4,12 @@ Reciver side of the bareflank hypercalls given by Libvmi.
 These extensions can be used just like other bareflank examples. 
 
 # Compilation and usage
+
 ```
 git clone https://github.com/Bareflank/hypervisor
 git clone https://github.com/boddumanohar/libvmi_extensions.git
 mkdir build; cd build
-cmake ../hypervisor -DDEFAULT_VMM=libmvi_extension -DEXTENSION=../libvmi_extensions
+cmake ../hypervisor -DDEFAULT_VMM=example_vmm -DEXTENSION=../libvmi_extensions
 make -j<# cores + 1>
 ```
 When the above commands are run, apis in `exit_handlers` runs along with the hypervisor. 

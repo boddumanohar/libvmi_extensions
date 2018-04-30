@@ -17,9 +17,11 @@
 // Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
 #include <bfvmm/vcpu/vcpu_factory.h>
-#include <eapis/vcpu/arch/intel_x64/vcpu.h>
+#include <bfvmm/hve/arch/intel_x64/vcpu/vcpu.h>
+#include <bfvmm/hve/arch/intel_x64/exit_handler/exit_handler.h>
+#include <bfdebug.h>
 
-namespace test
+namespace libvmi
 {
 
 class vcpu : public bfvmm::intel_x64::vcpu
@@ -39,14 +41,13 @@ public:
     vcpu(vcpuid::type id) : bfvmm::intel_x64::vcpu{id}
     {
         exit_handler()->add_handler(
-            vmcs_n::exit_reason::basic_exit_reason::vmcall,
+						intel_x64::vmcs::exit_reason::basic_exit_reason::vmcall,
             handler_delegate_t::create<vcpu, &vcpu::vmcall_handler>(this)
         );
     }
 
     bool vmcall_handler(gsl::not_null<bfvmm::intel_x64::vmcs *> vmcs)
     {
-//        bfdebug_info(VIC_LOG_DEBUG, "vmcall handled");
         bfdebug_info(0, "vmcall handled");
         return advance(vmcs);
     }
@@ -72,7 +73,7 @@ std::unique_ptr<vcpu>
 vcpu_factory::make_vcpu(vcpuid::type vcpuid, bfobject *obj)
 {
     bfignored(obj);
-    return std::make_unique<test::vcpu>(vcpuid);
+    return std::make_unique<libvmi::vcpu>(vcpuid);
 }
 
 }
