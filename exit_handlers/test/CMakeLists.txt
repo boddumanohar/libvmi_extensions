@@ -4,6 +4,10 @@ project(example_vmm C CXX)
 include(${SOURCE_CMAKE_DIR}/project.cmake)
 init_project()
 
+list(APPEND SOURCES
+	eax.asm
+	)	
+
 add_vmm_executable(example_vmm
     SOURCES test_vmcall.cpp
 )
