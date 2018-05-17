@@ -51,10 +51,22 @@ public:
 
 			bool vmcall_handler(gsl::not_null<bfvmm::intel_x64::vmcs *> vmcs) {
 				
+
+				//hypercall 1 = test bareflank status
+				uint64_t id = vmcs->save_state()->rax; 
+			  if (id == 1) {
+					bfdebug_info(0, "vmcall handled");
+				}
+				if (id == 2) { 
+					get_register_data(vmcs);
+				}
+					return advance(vmcs);
+			}
+
+			void get_register_data(gsl::not_null<bfvmm::intel_x64::vmcs *> vmcs){
 					bfdebug_info(0, "gettting register data");
 					BFDEBUG(" rax %ld ", vmcs->save_state()->rax);
 
-					return advance(vmcs);
 			}
 
    ~vcpu() = default;
