@@ -21,7 +21,7 @@
 #include <bfvmm/hve/arch/intel_x64/exit_handler/exit_handler.h>
 #include <bfdebug.h>
 #include <bfvmm/memory_manager/buddy_allocator.h>
-#include "vm_event.h"
+#include <bfjson.h>
 
 namespace libvmi
 {
@@ -50,33 +50,39 @@ public:
 
 			bool vmcall_handler(gsl::not_null<bfvmm::intel_x64::vmcs *> vmcs) {
 				//hypercall 1 = test bareflank status
-				uint64_t id = vmcs->save_state()->rax; 
+				/*uint64_t id = vmcs->save_state()->rax; 
 			  if (id == 1) {
 					bfdebug_info(0, "vmcall handled");
 				}
 
-				if (id == 2) {
+				if (id == 2) { */
 					//get_register_data(vmcs);
+
 					bfdebug_info(0, "gettting register data");
-					uint64_t ptr1 = vmcs->save_state()->rdx;
-					vm_event_response_t *ptr = (vm_event_response_t *)ptr1;
+					json j;
+					j["rax"] =  vmcs->save_state()->rax;
+					j["rbx"] =  vmcs->save_state()->rbx;
+					j["rcx"] =  vmcs->save_state()->rcx;
+					j["rdx"] =  vmcs->save_state()->rdx;
+					j["rsi"] =  vmcs->save_state()->rsi;
+					j["rdi"] =  vmcs->save_state()->rdi; 
+					j["rsp"] =  vmcs->save_state()->rsp;
+					j["rbp"] =  vmcs->save_state()->rbp;
+					j["rip"] =  vmcs->save_state()->rip;
+					j["r08"] =  vmcs->save_state()->r08;
+					j["r09"] =  vmcs->save_state()->r09;
+					j["r10"] =  vmcs->save_state()->r10;
+					j["r11"] =  vmcs->save_state()->r11;
+					j["r12"] =  vmcs->save_state()->r12;
+					j["r13"] =  vmcs->save_state()->r13;
+					j["r14"] =  vmcs->save_state()->r14;
+					j["r15"] =  vmcs->save_state()->r15;
 
-					if(ptr == NULL) {
-						bfdebug_info(0, "ptr is null");
-					}
+					std::string str = j.dump();
+					const char *cstr = str.c_str();
+					_putin_eax(cstr);
 
-					ptr->version = 0;
-					ptr->reason = VM_EVENT_REGISTER; 
-					ptr->vcpuid = 1;
-					ptr->u.x86.rcx =  vmcs->save_state()->rcx;
-					ptr->u.x86.rdx =  vmcs->save_state()->rdx;
-					ptr->u.x86.rbx =  vmcs->save_state()->rbx;
-					ptr->u.x86.rsp =  vmcs->save_state()->rsp;
-					ptr->u.x86.rbp =  vmcs->save_state()->rbp;
-					ptr->u.x86.rsi =  vmcs->save_state()->rsi;
-					ptr->u.x86.rdi =  vmcs->save_state()->rdi;
-
-				}
+			//}
 
 				return advance(vmcs);
 			}
