@@ -89,26 +89,7 @@ public:
 
 			void get_register_data(gsl::not_null<bfvmm::intel_x64::vmcs *> vmcs) {
 
-        bfdebug_info(0, "gettting register data");
-				uint64_t ptr1 = vmcs->save_state()->rdx;
-				vm_event_response_t *ptr = (vm_event_response_t *)ptr1;
-
-				if(ptr == NULL) {
-					bfdebug_info(0, "ptr is null");
-				}
-
-				ptr->version = 0;
-				ptr->reason = VM_EVENT_REGISTER; 
-				ptr->vcpuid = 1;
-				ptr->u.x86.rcx =  vmcs->save_state()->rcx;
-				ptr->u.x86.rdx =  vmcs->save_state()->rdx;
-				ptr->u.x86.rbx =  vmcs->save_state()->rbx;
-				ptr->u.x86.rsp =  vmcs->save_state()->rsp;
-				ptr->u.x86.rbp =  vmcs->save_state()->rbp;
-				ptr->u.x86.rsi =  vmcs->save_state()->rsi;
-				ptr->u.x86.rdi =  vmcs->save_state()->rdi;
-
-		}
+			}
 
     /// Destructor
     ///
