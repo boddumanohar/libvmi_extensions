@@ -20,6 +20,7 @@
 #include <bfvmm/hve/arch/intel_x64/exit_handler/exit_handler.h>
 #include <bfdebug.h>
 #include <bfvmm/memory_manager/buddy_allocator.h>
+#include "json.hpp"
 
 namespace libvmi
 {
@@ -49,7 +50,20 @@ public:
 			bool _vmcall_handler(gsl::not_null<bfvmm::intel_x64::vmcs *> vmcs) {
 				
 					bfdebug_info(0, "vmcall handled");
-					BFDEBUG("%s\n", "HELLO WORLD");
+					//nlohmann::json j;
+					//j["rax"] = 0xdeadbeef;
+					//std::string s = j.dump();
+					//const char *cstr = s.c_str();
+					const char *cstr = "hello world";
+					BFDEBUG("%s\n", cstr);
+
+				asm("movq %0, %%rdx"
+						:
+						:"a"(cstr)
+						:"rdx"
+						); 
+
+					BFDEBUG("%p\n", cstr);
 					return advance(vmcs);
 			}
 
