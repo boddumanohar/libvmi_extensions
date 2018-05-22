@@ -20,6 +20,7 @@
 #include <bfvmm/hve/arch/intel_x64/exit_handler/exit_handler.h>
 #include <bfdebug.h>
 #include <bfvmm/memory_manager/buddy_allocator.h>
+#include <bfvmm/memory_manager/arch/x64/map_ptr.h>
 #include "json.hpp"
 
 namespace libvmi
@@ -54,14 +55,21 @@ public:
 					//j["rax"] = 0xdeadbeef;
 					//std::string s = j.dump();
 					//const char *cstr = s.c_str();
+					
+					uint64_t addr = vmcs->save_state()->rdi;
+					uint64_t size = vmcs->save_state()->rsi;
+
+					auto imap = bfvmm::x64::make_unique_map<char>(addr, 
+										::intel_x64::vmcs::guest_cr3::get(), 
+										size, 
+										::intel_x64::vmcs::guest_ia32_pat::get());
+
+					//	bfvmm::x64::make_unique_map<char>(
+					//write the output JSON to this mapped memory region. 
+					BFDEBUG("%p\n", imap.get());
 					const char *cstr = "hello world";
 					BFDEBUG("%s\n", cstr);
-
-				asm("movq %0, %%rdx"
-						:
-						:"a"(cstr)
-						:"rdx"
-						); 
+					
 
 					BFDEBUG("%p\n", cstr);
 					return advance(vmcs);
