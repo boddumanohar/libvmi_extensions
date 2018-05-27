@@ -58,7 +58,6 @@ namespace libvmi
 			}
 
 			void get_register_data(gsl::not_null<bfvmm::intel_x64::vmcs *> vmcs){
-				bfdebug_info(0, "vmcall handled");
 				nlohmann::json j;
 				j["RAX"] = vmcs->save_state()->rax;
 				j["RBX"] = vmcs->save_state()->rbx;
@@ -83,6 +82,12 @@ namespace libvmi
 				j["CR4"] = ::intel_x64::cr4::get();
 				j["CR8"] = ::intel_x64::cr8::get();
 
+				/*//TODO: 
+				 * DR0-DR7 debug registers
+				 * segment resisters
+				 * MSR registers
+				 * complete list at https://github.com/boddumanohar/libvmi/blob/master/libvmi/libvmi.h
+				*/
 				uintptr_t addr = vmcs->save_state()->rdi;
 				uint64_t size = vmcs->save_state()->rsi;
 
@@ -95,6 +100,7 @@ namespace libvmi
 				auto &&dmp = j.dump();
 				__builtin_memcpy(imap.get(), dmp.data(), size);
 
+				bfdebug_info(0, "get-regsters vmcall handled");
 			}
 
 
