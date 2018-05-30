@@ -25,6 +25,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+using nlohmann::json;
 namespace libvmi
 {
 
@@ -50,15 +51,17 @@ namespace libvmi
 				if (id == 1) {
 					bfdebug_info(0, "vmcall handled");
 				}
-				if (id == 2) {
+				else if(id == 2) {
 					get_register_data(vmcs);
 				}
-
+				else if (id == 3) {
+					set_register(vmcs);
+				}
 				return advance(vmcs);
 			}
 
 			void get_register_data(gsl::not_null<bfvmm::intel_x64::vmcs *> vmcs){
-				nlohmann::json j;
+				json j;
 				j["RAX"] = vmcs->save_state()->rax;
 				j["RBX"] = vmcs->save_state()->rbx;
 				j["RCX"] = vmcs->save_state()->rcx;
@@ -92,17 +95,81 @@ namespace libvmi
 				uint64_t size = vmcs->save_state()->rsi;
 
 				// create memory map for the buffer in bareflank
-				auto imap = bfvmm::x64::make_unique_map<char>(addr, 
+				auto omap = bfvmm::x64::make_unique_map<char>(addr, 
 						::intel_x64::vmcs::guest_cr3::get(), 
 						size, 
 						::intel_x64::vmcs::guest_ia32_pat::get());
 
 				auto &&dmp = j.dump();
-				__builtin_memcpy(imap.get(), dmp.data(), size);
+				__builtin_memcpy(omap.get(), dmp.data(), size);
 
 				bfdebug_info(0, "get-regsters vmcall handled");
 			}
 
+			void set_register(gsl::not_null<bfvmm::intel_x64::vmcs *> vmcs) {
+
+				uintptr_t addr = vmcs->save_state()->rdi;
+				uint64_t size = vmcs->save_state()->rsi;
+
+				auto imap = bfvmm::x64::make_unique_map<char>(addr, 
+						::intel_x64::vmcs::guest_cr3::get(), 
+						size, 
+						::intel_x64::vmcs::guest_ia32_pat::get());
+
+				auto ijson = json::parse(std::string(imap.get(), size));
+	
+				for (json::iterator it = ijson.begin(); it != ijson.end(); ++it) {
+					if (it.key() == "RDX")
+							vmcs->save_state()->rdx = it.value();
+					 if (it.key() == "RAX")
+					vmcs->save_state()->rax = it.value();
+					 if (it.key() == "RBX")
+					vmcs->save_state()->rbx = it.value();
+					 if (it.key() == "RCX")
+					vmcs->save_state()->rcx = it.value();
+					 if (it.key() == "R08")
+					vmcs->save_state()->r08 = it.value();
+					 if (it.key() == "R09")
+					vmcs->save_state()->r09 = it.value();
+					 if (it.key() == "R10")
+					vmcs->save_state()->r10 = it.value();
+					 if (it.key() == "R11")
+					vmcs->save_state()->r11 = it.value();
+					 if (it.key() == "R12")
+					vmcs->save_state()->r12 = it.value();
+					 if (it.key() == "R13")
+					vmcs->save_state()->r13 = it.value();
+					 if (it.key() == "R14")
+					vmcs->save_state()->r14 = it.value();
+					 if (it.key() == "R15")
+					vmcs->save_state()->r15 = it.value();
+					 if (it.key() == "RBP")
+					vmcs->save_state()->rbp = it.value();
+					 if (it.key() == "RSI")
+					vmcs->save_state()->rsi = it.value();
+					 if (it.key() == "RDI")
+					vmcs->save_state()->rdi = it.value();
+					 if (it.key() == "RIP")
+					vmcs->save_state()->rip = it.value();
+					 if (it.key() == "RSP")
+					vmcs->save_state()->rsp = it.value();
+					 /*if (it.key() == "CR0")
+					::intel_x64::cr0::set(it.value());
+					 if (it.key() == "CR2")
+					::intel_x64::cr2::set(it.value());
+					 if (it.key() == "CR3")
+					::intel_x64::cr3::set(it.value());
+					 if (it.key() == "CR4")
+					::intel_x64::cr4::set(it.value());
+					 if (it.key() == "CR8")
+							::intel_x64::cr8::set(it.value()); */
+					 else
+						 vmcs->save_state()->rdx = -1;
+
+				}
+
+				bfdebug_info(0, "set-register vmcall handled");
+			}
 
 			~vcpu() = default;
 	};
