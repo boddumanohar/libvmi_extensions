@@ -57,6 +57,9 @@ namespace libvmi
 				else if (id == 3) {
 					set_register(vmcs);
 				}
+				else if (id == 4) {
+					get_memmap(vmcs);
+				}
 				return advance(vmcs);
 			}
 
@@ -84,7 +87,8 @@ namespace libvmi
 				j["CR3"] = ::intel_x64::cr3::get();
 				j["CR4"] = ::intel_x64::cr4::get();
 				j["CR8"] = ::intel_x64::cr8::get();
-
+				//::intel_x64::vmcs::guest_ia32_efer::lma::enable();
+				j["MSR_EFER"] = ::intel_x64::vmcs::guest_ia32_efer::get();
 				/*//TODO: 
 				 * DR0-DR7 debug registers
 				 * segment resisters
@@ -171,6 +175,31 @@ namespace libvmi
 				bfdebug_info(0, "set-register vmcall handled");
 			}
 
+			//void set_register(gsl::not_null<bfvmm::intel_x64::vmcs *> vmcs) {
+				// 
+			//}
+
+      void get_memmap(gsl::not_null<bfvmm::intel_x64::vmcs *> vmcs) {
+
+				uintptr_t addr = vmcs->save_state()->rdi;
+				uint64_t size = vmcs->save_state()->rsi;
+
+				uint64_t page = vmcs->save_state()->rbx;
+				uint64_t page_shift = vmcs->save_state()->rcx;
+
+				uint64_t paddr = page << page_shift;
+				
+				// create memory map for the buffer in bareflank
+				auto omap = bfvmm::x64::make_unique_map<uintptr_t>(addr, 
+						::intel_x64::vmcs::guest_cr3::get(), 
+						size, 
+						::intel_x64::vmcs::guest_ia32_pat::get());
+
+				auto imap = bfvmm::x64::make_unique_map<uintptr_t>(paddr); 
+				
+					__builtin_memcpy(omap.get(),imap.get(),size);
+
+			}
 			~vcpu() = default;
 	};
 
