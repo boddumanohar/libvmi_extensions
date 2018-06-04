@@ -87,7 +87,7 @@ namespace libvmi
 				j["CR3"] = ::intel_x64::cr3::get();
 				j["CR4"] = ::intel_x64::cr4::get();
 				j["CR8"] = ::intel_x64::cr8::get();
-				//::intel_x64::vmcs::guest_ia32_efer::lma::enable();
+				//::intel_x64::vmcs::guest_ia32_efer::lma::disable();
 				j["MSR_EFER"] = ::intel_x64::vmcs::guest_ia32_efer::get();
 				/*//TODO: 
 				 * DR0-DR7 debug registers
@@ -182,22 +182,27 @@ namespace libvmi
       void get_memmap(gsl::not_null<bfvmm::intel_x64::vmcs *> vmcs) {
 
 				uintptr_t addr = vmcs->save_state()->rdi;
-				uint64_t size = vmcs->save_state()->rsi;
+				uint64_t size = 4096; 
 
 				uint64_t page = vmcs->save_state()->rbx;
-				uint64_t page_shift = vmcs->save_state()->rcx;
+				uint64_t page_shift = 12;
 
 				uint64_t paddr = page << page_shift;
 				
 				// create memory map for the buffer in bareflank
-				auto omap = bfvmm::x64::make_unique_map<uintptr_t>(addr, 
+				auto omap = bfvmm::x64::make_unique_map<uint64_t>(addr, 
 						::intel_x64::vmcs::guest_cr3::get(), 
 						size, 
 						::intel_x64::vmcs::guest_ia32_pat::get());
 
-				auto imap = bfvmm::x64::make_unique_map<uintptr_t>(paddr); 
+				auto imap = bfvmm::x64::make_unique_map<uint64_t>(paddr); 
 				
-					__builtin_memcpy(omap.get(),imap.get(),size);
+				//json j;
+				//j["map"] = imap.get();
+				//imap.release();
+				//auto &&dmp = j.dump();
+				//__builtin_memcpy(omap.get(), dmp.data(), size);
+				__builtin_memcpy(omap.get(), imap.get(), size);
 
 			}
 			~vcpu() = default;
