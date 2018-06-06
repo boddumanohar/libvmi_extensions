@@ -182,7 +182,7 @@ namespace libvmi
       void get_memmap(gsl::not_null<bfvmm::intel_x64::vmcs *> vmcs) {
 
 				uintptr_t addr = vmcs->save_state()->rdi;
-				uint64_t size = 4096; 
+				uint64_t size = ::x64::page_size; 
 
 				uint64_t page = vmcs->save_state()->rbx;
 				uint64_t page_shift = 12;
@@ -196,13 +196,34 @@ namespace libvmi
 						::intel_x64::vmcs::guest_ia32_pat::get());
 
 				auto imap = bfvmm::x64::make_unique_map<uint64_t>(paddr); 
-				
+				auto idata = imap.get();
+				BFDEBUG("before: the first value is %ld\n ", idata[0]);
+				BFDEBUG("after the last value is %ld\n ", idata[1000]);  // working the value is 0
+				BFDEBUG("after the last value is %ld\n ", idata[2000]);  // working the value is 0
+				BFDEBUG("after the last value is %ld\n ", idata[2001]);  // working the value is 0
+				BFDEBUG("after the last value is %ld\n ", idata[2010]);  // working the value is 0
+				BFDEBUG("after the last value is %ld\n ", idata[2020]);  // working the value is 0
+				BFDEBUG("after the last value is %ld\n ", idata[2030]);  // working the value is 0
+				BFDEBUG("after the last value is %ld\n ", idata[2040]);  // working the value is 0
+				BFDEBUG("after the last value is %ld\n ", idata[2047]);  // working the value is 0
+				//BFDEBUG("after the last value is %ld\n ", idata[2048]);  // not working 
+
 				//json j;
-				//j["map"] = imap.get();
-				//imap.release();
+				//j["map"] = 1234567; // pointer to uint64_t
 				//auto &&dmp = j.dump();
 				//__builtin_memcpy(omap.get(), dmp.data(), size);
 				__builtin_memcpy(omap.get(), imap.get(), size);
+
+				auto odata = omap.get();
+				BFDEBUG("after the first value is %ld\n ", odata[0]);
+				BFDEBUG("after the last value is %ld\n ", odata[2095]); // working: the value is 0
+				BFDEBUG("after the last value is %ld\n ", odata[2096]);  //  working the value is 0
+				BFDEBUG("after the last value is %ld\n ", odata[2097]);  // working the value is 0
+				BFDEBUG("after the last value is %ld\n ", odata[2098]);  // working the value is 0
+				BFDEBUG("after the last value is %ld\n ", odata[2099]);  // working the value is 0
+				//BFDEBUG("after the last value is %ld\n ", odata[3000]);  // not with 4096 size
+				//BFDEBUG("after the last value is %ld\n ", odata[4096]);  // 
+
 
 			}
 			~vcpu() = default;
