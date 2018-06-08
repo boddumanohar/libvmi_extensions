@@ -196,13 +196,10 @@ namespace libvmi
 						::intel_x64::vmcs::guest_ia32_pat::get());
 
 				auto imap = bfvmm::x64::make_unique_map<uint64_t>(paddr); 
-				
-				//json j;
-				//j["map"] = imap.get();
-				//imap.release();
-				//auto &&dmp = j.dump();
-				//__builtin_memcpy(omap.get(), dmp.data(), size);
+
 				__builtin_memcpy(omap.get(), imap.get(), size);
+
+				BFDEBUG("0th value is %ld \n", omap.get()[0]);
 
 			}
 			~vcpu() = default;
