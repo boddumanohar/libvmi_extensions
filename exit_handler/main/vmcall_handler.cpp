@@ -103,6 +103,7 @@ namespace libvmi
 				auto &&dmp = j.dump();
 				__builtin_memcpy(omap.get(), dmp.data(), size);
 
+				BFDEBUG("the 0th value is %c \n", omap.get()[0]);
 				bfdebug_info(0, "get-regsters vmcall handled");
 			}
 
