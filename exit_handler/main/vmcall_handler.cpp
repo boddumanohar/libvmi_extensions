@@ -198,7 +198,6 @@ namespace libvmi
 				auto imap = bfvmm::x64::make_unique_map<uint64_t>(paddr); 
 
 
-				BFDEBUG("0th value is %ld \n", imap.get()[0]);
 				json j;
 				char key[4];
 				for(int i=0;i<256;i++) {
@@ -210,7 +209,8 @@ namespace libvmi
 					//j["eax"] = 12345678;
 				auto &&dmp = j.dump();
 				__builtin_memcpy(omap.get(), dmp.data(), size);
-
+				BFDEBUG("0th value is %c \n", omap.get()[0]);
+				
 				//BFDEBUG(" string %s\n", omap.get());
 			}
 			~vcpu() = default;
