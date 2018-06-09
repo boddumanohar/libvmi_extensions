@@ -190,28 +190,16 @@ namespace libvmi
 				uint64_t paddr = page << page_shift;
 				
 				// create memory map for the buffer in bareflank
-				auto omap = bfvmm::x64::make_unique_map<char>(addr, 
+				auto omap = bfvmm::x64::make_unique_map<uint64_t>(addr, 
 						::intel_x64::vmcs::guest_cr3::get(), 
 						size, 
 						::intel_x64::vmcs::guest_ia32_pat::get());
 
 				auto imap = bfvmm::x64::make_unique_map<uint64_t>(paddr); 
-
-
-				json j;
-				char key[4];
-				for(int i=0;i<256;i++) {
-					sprintf(key, "%d", i);
-					j[key] = imap.get()[i];
-				}
-
-					//json j;
-					//j["eax"] = 12345678;
-				auto &&dmp = j.dump();
-				__builtin_memcpy(omap.get(), dmp.data(), size);
-				BFDEBUG("0th value is %c \n", omap.get()[0]);
 				
-				//BFDEBUG(" string %s\n", omap.get());
+				__builtin_memcpy(omap.get(), imap.get(), size);
+
+				BFDEBUG("the value after is copy is %ld \n", omap.get()[0]);
 			}
 			~vcpu() = default;
 	};
