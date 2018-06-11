@@ -187,19 +187,39 @@ namespace libvmi
 				uint64_t page = vmcs->save_state()->rbx;
 				uint64_t page_shift = 12;
 
-				uint64_t paddr = page << page_shift;
+				uint64_t paddr = page<<page_shift;
 				
 				// create memory map for the buffer in bareflank
-				auto omap = bfvmm::x64::make_unique_map<uint64_t>(addr, 
+				auto omap = bfvmm::x64::make_unique_map<void>(addr, 
 						::intel_x64::vmcs::guest_cr3::get(), 
 						size, 
 						::intel_x64::vmcs::guest_ia32_pat::get());
 
-				auto imap = bfvmm::x64::make_unique_map<uint64_t>(paddr); 
-				
+				auto imap = bfvmm::x64::make_unique_map<void>(paddr); 
+
 				__builtin_memcpy(omap.get(), imap.get(), size);
 
-				BFDEBUG("the value after is copy is %ld \n", omap.get()[0]);
+				//BFDEBUG("the value after is copy is %ld \n", omap.get()[0]);
+				//uint64_t pml4_value = omap.get()[0];
+
+				//BFDEBUG("pml4_value is %ld \n", pml4_value);
+				//uint64_t pdpte_location = pml4e_value & VMI_BIT_MASK(12,51);
+
+				/*for (int i = 0;i < 10; i++) {
+					auto pml4_pte = bfvmm::x64::page_table_entry{&imap.get()[i]};
+					BFDEBUG("pml4_pte is %ld \n", pml4_pte.phys_addr());
+				}*/
+
+				BFDEBUG("DONE\n");
+				 /*from = ::x64::page_table::pdpt::from;
+				 auto pdpt_idx = ::x64::page_table::index(current_virt, from);
+				 auto pdpt_map = bfvmm::x64::make_unique_map<uintptr_t>(pml4_pte.phys_addr());
+				 auto pdpt_pte = bfvmm::x64::page_table_entry{&pdpt_map.get()[pdpt_idx]};
+
+				 BFDEBUG("pdpte_location %ld \n", pdpt_pte.phys_addr());  */
+
+				imap.release();
+				//omap.release();
 			}
 			~vcpu() = default;
 	};
