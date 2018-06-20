@@ -29,178 +29,178 @@ using nlohmann::json;
 namespace libvmi
 {
 
-	class vcpu : public bfvmm::intel_x64::vcpu
-	{
-		public:
+class vcpu : public bfvmm::intel_x64::vcpu
+{
+public:
 
-			using handler_t = bool(gsl::not_null<bfvmm::intel_x64::vmcs *>);
-			using handler_delegate_t = delegate<handler_t>;
+    using handler_t = bool(gsl::not_null<bfvmm::intel_x64::vmcs *>);
+    using handler_delegate_t = delegate<handler_t>;
 
-			vcpu(vcpuid::type id) : bfvmm::intel_x64::vcpu{id}
-			{
-				exit_handler()->add_handler(
-						intel_x64::vmcs::exit_reason::basic_exit_reason::vmcall,
-						handler_delegate_t::create<vcpu, &vcpu::_vmcall_handler>(this)
-						);
-			}
+    vcpu(vcpuid::type id) : bfvmm::intel_x64::vcpu{id}
+    {
+        exit_handler()->add_handler(
+            intel_x64::vmcs::exit_reason::basic_exit_reason::vmcall,
+            handler_delegate_t::create<vcpu, &vcpu::_vmcall_handler>(this)
+        );
+    }
 
-			bool _vmcall_handler(gsl::not_null<bfvmm::intel_x64::vmcs *> vmcs) {
+    bool _vmcall_handler(gsl::not_null<bfvmm::intel_x64::vmcs *> vmcs) {
 
-				uint64_t id = vmcs->save_state()->rax; 
+        uint64_t id = vmcs->save_state()->rax;
 
-				if (id == 1) {
-					bfdebug_info(0, "vmcall handled");
-				}
-				else if(id == 2) {
-					get_register_data(vmcs);
-				}
-				else if (id == 3) {
-					set_register(vmcs);
-				}
-				else if (id == 4) {
-					get_memmap(vmcs);
-				}
-				return advance(vmcs);
-			}
+        if (id == 1) {
+            bfdebug_info(0, "vmcall handled");
+        }
+        else if(id == 2) {
+            get_register_data(vmcs);
+        }
+        else if (id == 3) {
+            set_register(vmcs);
+        }
+        else if (id == 4) {
+            get_memmap(vmcs);
+        }
+        return advance(vmcs);
+    }
 
-			void get_register_data(gsl::not_null<bfvmm::intel_x64::vmcs *> vmcs){
-				json j;
-				j["RAX"] = vmcs->save_state()->rax;
-				j["RBX"] = vmcs->save_state()->rbx;
-				j["RCX"] = vmcs->save_state()->rcx;
-				j["RDX"] = vmcs->save_state()->rdx;
-				j["R08"] = vmcs->save_state()->r08;
-				j["R09"] = vmcs->save_state()->r09;
-				j["R10"] = vmcs->save_state()->r10;
-				j["R11"] = vmcs->save_state()->r11;
-				j["R12"] = vmcs->save_state()->r12;
-				j["R13"] = vmcs->save_state()->r13;
-				j["R14"] = vmcs->save_state()->r14;
-				j["R15"] = vmcs->save_state()->r15;
-				j["RBP"] = vmcs->save_state()->rbp;
-				j["RSI"] = vmcs->save_state()->rsi;
-				j["RDI"] = vmcs->save_state()->rdi;
-				j["RIP"] = vmcs->save_state()->rip;
-				j["RSP"] = vmcs->save_state()->rsp;
-				j["CR0"] = ::intel_x64::cr0::get();
-				j["CR2"] = ::intel_x64::cr2::get();
-				j["CR3"] = ::intel_x64::cr3::get();
-				j["CR4"] = ::intel_x64::cr4::get();
-				j["CR8"] = ::intel_x64::cr8::get();
-				j["MSR_EFER"] = ::intel_x64::vmcs::guest_ia32_efer::get();
-				/*//TODO: 
-				 * DR0-DR7 debug registers
-				 * segment resisters
-				 * MSR registers
-				 * complete list at https://github.com/boddumanohar/libvmi/blob/master/libvmi/libvmi.h
-				*/
-				uintptr_t addr = vmcs->save_state()->rdi;
-				uint64_t size = vmcs->save_state()->rsi;
+    void get_register_data(gsl::not_null<bfvmm::intel_x64::vmcs *> vmcs) {
+        json j;
+        j["RAX"] = vmcs->save_state()->rax;
+        j["RBX"] = vmcs->save_state()->rbx;
+        j["RCX"] = vmcs->save_state()->rcx;
+        j["RDX"] = vmcs->save_state()->rdx;
+        j["R08"] = vmcs->save_state()->r08;
+        j["R09"] = vmcs->save_state()->r09;
+        j["R10"] = vmcs->save_state()->r10;
+        j["R11"] = vmcs->save_state()->r11;
+        j["R12"] = vmcs->save_state()->r12;
+        j["R13"] = vmcs->save_state()->r13;
+        j["R14"] = vmcs->save_state()->r14;
+        j["R15"] = vmcs->save_state()->r15;
+        j["RBP"] = vmcs->save_state()->rbp;
+        j["RSI"] = vmcs->save_state()->rsi;
+        j["RDI"] = vmcs->save_state()->rdi;
+        j["RIP"] = vmcs->save_state()->rip;
+        j["RSP"] = vmcs->save_state()->rsp;
+        j["CR0"] = ::intel_x64::cr0::get();
+        j["CR2"] = ::intel_x64::cr2::get();
+        j["CR3"] = ::intel_x64::cr3::get();
+        j["CR4"] = ::intel_x64::cr4::get();
+        j["CR8"] = ::intel_x64::cr8::get();
+        j["MSR_EFER"] = ::intel_x64::vmcs::guest_ia32_efer::get();
+        /*//TODO:
+         * DR0-DR7 debug registers
+         * segment resisters
+         * MSR registers
+         * complete list at https://github.com/boddumanohar/libvmi/blob/master/libvmi/libvmi.h
+        */
+        uintptr_t addr = vmcs->save_state()->rdi;
+        uint64_t size = vmcs->save_state()->rsi;
 
-				// create memory map for the buffer in bareflank
-				auto omap = bfvmm::x64::make_unique_map<char>(addr, 
-						::intel_x64::vmcs::guest_cr3::get(), 
-						size, 
-						::intel_x64::vmcs::guest_ia32_pat::get());
+        // create memory map for the buffer in bareflank
+        auto omap = bfvmm::x64::make_unique_map<char>(addr,
+                    ::intel_x64::vmcs::guest_cr3::get(),
+                    size,
+                    ::intel_x64::vmcs::guest_ia32_pat::get());
 
-				auto &&dmp = j.dump();
-				__builtin_memcpy(omap.get(), dmp.data(), size);
+        auto &&dmp = j.dump();
+        __builtin_memcpy(omap.get(), dmp.data(), size);
 
-				bfdebug_info(0, "get-regsters vmcall handled");
-			}
+        bfdebug_info(0, "get-regsters vmcall handled");
+    }
 
-			void set_register(gsl::not_null<bfvmm::intel_x64::vmcs *> vmcs) {
+    void set_register(gsl::not_null<bfvmm::intel_x64::vmcs *> vmcs) {
 
-				uintptr_t addr = vmcs->save_state()->rdi;
-				uint64_t size = vmcs->save_state()->rsi;
+        uintptr_t addr = vmcs->save_state()->rdi;
+        uint64_t size = vmcs->save_state()->rsi;
 
-				auto imap = bfvmm::x64::make_unique_map<char>(addr, 
-						::intel_x64::vmcs::guest_cr3::get(), 
-						size, 
-						::intel_x64::vmcs::guest_ia32_pat::get());
+        auto imap = bfvmm::x64::make_unique_map<char>(addr,
+                    ::intel_x64::vmcs::guest_cr3::get(),
+                    size,
+                    ::intel_x64::vmcs::guest_ia32_pat::get());
 
-				auto ijson = json::parse(std::string(imap.get(), size));
-	
-				for (json::iterator it = ijson.begin(); it != ijson.end(); ++it) {
-					if (it.key() == "RDX")
-							vmcs->save_state()->rdx = it.value();
-					 if (it.key() == "RAX")
-					vmcs->save_state()->rax = it.value();
-					 if (it.key() == "RBX")
-					vmcs->save_state()->rbx = it.value();
-					 if (it.key() == "RCX")
-					vmcs->save_state()->rcx = it.value();
-					 if (it.key() == "R08")
-					vmcs->save_state()->r08 = it.value();
-					 if (it.key() == "R09")
-					vmcs->save_state()->r09 = it.value();
-					 if (it.key() == "R10")
-					vmcs->save_state()->r10 = it.value();
-					 if (it.key() == "R11")
-					vmcs->save_state()->r11 = it.value();
-					 if (it.key() == "R12")
-					vmcs->save_state()->r12 = it.value();
-					 if (it.key() == "R13")
-					vmcs->save_state()->r13 = it.value();
-					 if (it.key() == "R14")
-					vmcs->save_state()->r14 = it.value();
-					 if (it.key() == "R15")
-					vmcs->save_state()->r15 = it.value();
-					 if (it.key() == "RBP")
-					vmcs->save_state()->rbp = it.value();
-					 if (it.key() == "RSI")
-					vmcs->save_state()->rsi = it.value();
-					 if (it.key() == "RDI")
-					vmcs->save_state()->rdi = it.value();
-					 if (it.key() == "RIP")
-					vmcs->save_state()->rip = it.value();
-					 if (it.key() == "RSP")
-					vmcs->save_state()->rsp = it.value();
-					 /*if (it.key() == "CR0")
-					::intel_x64::cr0::set(it.value());
-					 if (it.key() == "CR2")
-					::intel_x64::cr2::set(it.value());
-					 if (it.key() == "CR3")
-					::intel_x64::cr3::set(it.value());
-					 if (it.key() == "CR4")
-					::intel_x64::cr4::set(it.value());
-					 if (it.key() == "CR8")
-							::intel_x64::cr8::set(it.value()); */
-					 else
-						 vmcs->save_state()->rdx = -1;
+        auto ijson = json::parse(std::string(imap.get(), size));
 
-				}
+        for (json::iterator it = ijson.begin(); it != ijson.end(); ++it) {
+            if (it.key() == "RDX")
+                vmcs->save_state()->rdx = it.value();
+            if (it.key() == "RAX")
+                vmcs->save_state()->rax = it.value();
+            if (it.key() == "RBX")
+                vmcs->save_state()->rbx = it.value();
+            if (it.key() == "RCX")
+                vmcs->save_state()->rcx = it.value();
+            if (it.key() == "R08")
+                vmcs->save_state()->r08 = it.value();
+            if (it.key() == "R09")
+                vmcs->save_state()->r09 = it.value();
+            if (it.key() == "R10")
+                vmcs->save_state()->r10 = it.value();
+            if (it.key() == "R11")
+                vmcs->save_state()->r11 = it.value();
+            if (it.key() == "R12")
+                vmcs->save_state()->r12 = it.value();
+            if (it.key() == "R13")
+                vmcs->save_state()->r13 = it.value();
+            if (it.key() == "R14")
+                vmcs->save_state()->r14 = it.value();
+            if (it.key() == "R15")
+                vmcs->save_state()->r15 = it.value();
+            if (it.key() == "RBP")
+                vmcs->save_state()->rbp = it.value();
+            if (it.key() == "RSI")
+                vmcs->save_state()->rsi = it.value();
+            if (it.key() == "RDI")
+                vmcs->save_state()->rdi = it.value();
+            if (it.key() == "RIP")
+                vmcs->save_state()->rip = it.value();
+            if (it.key() == "RSP")
+                vmcs->save_state()->rsp = it.value();
+            /*if (it.key() == "CR0")
+            ::intel_x64::cr0::set(it.value());
+             if (it.key() == "CR2")
+            ::intel_x64::cr2::set(it.value());
+             if (it.key() == "CR3")
+            ::intel_x64::cr3::set(it.value());
+             if (it.key() == "CR4")
+            ::intel_x64::cr4::set(it.value());
+             if (it.key() == "CR8")
+            		::intel_x64::cr8::set(it.value()); */
+            else
+                vmcs->save_state()->rdx = -1;
 
-				bfdebug_info(0, "set-register vmcall handled");
-			}
+        }
 
-			//void set_register(gsl::not_null<bfvmm::intel_x64::vmcs *> vmcs) {
-				// 
-			//}
+        bfdebug_info(0, "set-register vmcall handled");
+    }
 
-      void get_memmap(gsl::not_null<bfvmm::intel_x64::vmcs *> vmcs) {
+    //void set_register(gsl::not_null<bfvmm::intel_x64::vmcs *> vmcs) {
+    //
+    //}
 
-				uintptr_t buffer = vmcs->save_state()->rdi;
-				uint64_t size = 4096; 
+    void get_memmap(gsl::not_null<bfvmm::intel_x64::vmcs *> vmcs) {
 
-				uint64_t page = vmcs->save_state()->rbx;
-				uint64_t page_shift = 12;
+        uintptr_t buffer = vmcs->save_state()->rdi;
+        uint64_t size = 4096;
 
-				uint64_t paddr = page << page_shift;
-				
-				// create memory map for physical address in bareflank
-				auto omap = bfvmm::x64::make_unique_map<uintptr_t>(buffer, 
-						::intel_x64::vmcs::guest_cr3::get(), 
-						size, 
-						::intel_x64::vmcs::guest_ia32_pat::get());
+        uint64_t page = vmcs->save_state()->rbx;
+        uint64_t page_shift = 12;
 
-				auto imap = bfvmm::x64::make_unique_map<uintptr_t>(paddr); 
-				
-				__builtin_memcpy(omap.get(), imap.get(), size); // copy the map
+        uint64_t paddr = page << page_shift;
 
-			}
-			~vcpu() = default;
-	};
+        // create memory map for physical address in bareflank
+        auto omap = bfvmm::x64::make_unique_map<uintptr_t>(buffer,
+                    ::intel_x64::vmcs::guest_cr3::get(),
+                    size,
+                    ::intel_x64::vmcs::guest_ia32_pat::get());
+
+        auto imap = bfvmm::x64::make_unique_map<uintptr_t>(paddr);
+
+        __builtin_memcpy(omap.get(), imap.get(), size); // copy the map
+
+    }
+    ~vcpu() = default;
+};
 
 }
 
@@ -211,11 +211,11 @@ namespace libvmi
 namespace bfvmm
 {
 
-	std::unique_ptr<vcpu>
-		vcpu_factory::make_vcpu(vcpuid::type vcpuid, bfobject *obj)
-		{
-			bfignored(obj);
-			return std::make_unique<libvmi::vcpu>(vcpuid);
-		}
+std::unique_ptr<vcpu>
+vcpu_factory::make_vcpu(vcpuid::type vcpuid, bfobject *obj)
+{
+    bfignored(obj);
+    return std::make_unique<libvmi::vcpu>(vcpuid);
+}
 
 }
