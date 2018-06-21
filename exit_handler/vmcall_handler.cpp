@@ -24,8 +24,13 @@
 #include "json.hpp"
 #include <stdlib.h>
 #include <string.h>
+#include <eapis/hve/arch/intel_x64/hve.h>
+#include <eapis/hve/arch/intel_x64/vic.h>
+#include <eapis/hve/arch/intel_x64/ept.h>
 
 using nlohmann::json;
+using namespace eapis::intel_x64;
+using namespace eapis::intel_x64::ept;
 namespace libvmi
 {
 
@@ -60,6 +65,9 @@ public:
         else if (id == 4) {
             get_memmap(vmcs);
         }
+	else if (id == 5) {
+	    get_memmap_ept(vmcs);
+	}
         return advance(vmcs);
     }
 
@@ -199,6 +207,43 @@ public:
         __builtin_memcpy(omap.get(), imap.get(), size); // copy the map
 
     }
+
+// (dummy buffer)addr -> X   -> hva1 -> hpa1
+//                       gpa -> hva2 -> hpa2 
+//
+// To goal is to use EPT and make addr point to gpa instead of X.
+
+
+void get_memmap_ept(gsl::not_null<bfvmm::intel_x64::vmcs *> vmcs) {
+        uintptr_t addr = vmcs->save_state()->rdi;
+        uint64_t size = 4096;
+
+        uint64_t page = vmcs->save_state()->rbx;
+        uint64_t page_shift = 12;
+
+        gpa_t gpa = page<<page_shift;
+
+        auto hva1 = bfvmm::x64::make_unique_map<void>(addr,
+                    ::intel_x64::vmcs::guest_cr3::get(),
+                    size,
+                    ::intel_x64::vmcs::guest_ia32_pat::get());
+
+        auto hva2 = bfvmm::x64::make_unique_map<void>(gpa);
+
+        auto hve = std::make_unique<eapis::intel_x64::hve>(exit_handler(), vmcs.get());
+        auto mem_map = std::make_unique<eapis::intel_x64::ept::memory_map>();
+
+        const auto hpa1 = g_mm->virtptr_to_physint(hva1.get());
+        const auto hpa2 = g_mm->virtptr_to_physint(hva2.get());
+
+        const auto lo_end = ept::align_4k(gpa) - ept::page_size_4k;
+        ept::identity_map_bestfit_lo(*mem_map, 0ULL, lo_end);  // setup identity mapping
+        ept::enable_ept(ept::eptp(*mem_map), hve.get()); // enable ept
+
+        // remap - use EPT and switch the pointers?
+
+    }
+
     ~vcpu() = default;
 };
 
