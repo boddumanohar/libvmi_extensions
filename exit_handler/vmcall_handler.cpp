@@ -34,6 +34,8 @@ using namespace eapis::intel_x64::ept;
 namespace libvmi
 {
 
+auto mem_map = std::make_unique<eapis::intel_x64::ept::memory_map>();
+
 class vcpu : public bfvmm::intel_x64::vcpu
 {
 public:
@@ -54,6 +56,10 @@ public:
         uint64_t id = vmcs->save_state()->rax;
 
         if (id == 1) {
+
+            auto hve = std::make_unique<eapis::intel_x64::hve>(exit_handler(), vmcs.get());
+            ept::enable_ept(ept::eptp(*mem_map), hve.get()); // enable ept
+
             bfdebug_info(0, "vmcall handled");
         }
         else if(id == 2) {
@@ -65,9 +71,9 @@ public:
         else if (id == 4) {
             get_memmap(vmcs);
         }
-	else if (id == 5) {
-	    get_memmap_ept(vmcs);
-	}
+        else if (id == 5) {
+            get_memmap_ept(vmcs);
+        }
         return advance(vmcs);
     }
 
@@ -208,40 +214,46 @@ public:
 
     }
 
-// (dummy buffer)addr -> X   -> hva1 -> hpa1
-//                       gpa -> hva2 -> hpa2 
+// (dummy buffer)addr -> gpa1 -> hva1 -> hpa1
+//                       gpa2 -> hva2 -> hpa2
 //
-// To goal is to use EPT and make addr point to gpa instead of X.
+// To goal is to use EPT and make addr point to gpa2 instead of gpa1.
 
 
-void get_memmap_ept(gsl::not_null<bfvmm::intel_x64::vmcs *> vmcs) {
+    void get_memmap_ept(gsl::not_null<bfvmm::intel_x64::vmcs *> vmcs) {
         uintptr_t addr = vmcs->save_state()->rdi;
         uint64_t size = 4096;
 
         uint64_t page = vmcs->save_state()->rbx;
         uint64_t page_shift = 12;
 
-        gpa_t gpa = page<<page_shift;
+        gpa_t gpa1 = page<<page_shift;
+
+        gpa_t gpa2 = bfvmm::x64::virt_to_phys_with_cr3(addr, ::intel_x64::vmcs::guest_cr3::get());
 
         auto hva1 = bfvmm::x64::make_unique_map<void>(addr,
                     ::intel_x64::vmcs::guest_cr3::get(),
                     size,
                     ::intel_x64::vmcs::guest_ia32_pat::get());
 
-        auto hva2 = bfvmm::x64::make_unique_map<void>(gpa);
-
-        auto hve = std::make_unique<eapis::intel_x64::hve>(exit_handler(), vmcs.get());
-        auto mem_map = std::make_unique<eapis::intel_x64::ept::memory_map>();
+        auto hva2 = bfvmm::x64::make_unique_map<void>(gpa2);
 
         const auto hpa1 = g_mm->virtptr_to_physint(hva1.get());
         const auto hpa2 = g_mm->virtptr_to_physint(hva2.get());
 
-        const auto lo_end = ept::align_4k(gpa) - ept::page_size_4k;
-        ept::identity_map_bestfit_lo(*mem_map, 0ULL, lo_end);  // setup identity mapping
-        ept::enable_ept(ept::eptp(*mem_map), hve.get()); // enable ept
+        ept::map_4k(*mem_map, gpa1, hpa1);
+        ept::map_4k(*mem_map, gpa2, hpa2);
+
+        // at this point the mapping is as such
+
+        // (dummy buffer)addr -> gpa1 -> hva1 -> hpa1
+        //                       gpa2 -> hva2 -> hpa2
+
+        // To goal is:
+
+        // (dummy buffer)addr -> gpa2 -> hva2 -> hpa2
 
         // remap - use EPT and switch the pointers?
-
     }
 
     ~vcpu() = default;
