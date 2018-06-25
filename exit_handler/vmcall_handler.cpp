@@ -36,8 +36,8 @@ using namespace eapis::intel_x64::ept;
 namespace ept = eapis::intel_x64::ept;
 namespace vmcs = ::intel_x64::vmcs;
 
-const uint64_t page_size_bytes = 0x1000ULL;
-const uint64_t page_count = 0x1000000ULL;
+const uint64_t page_size_bytes = 0x200000ULL;
+const uint64_t page_count = 0x8000ULL;
 
 namespace libvmi
 {
@@ -57,7 +57,7 @@ void enable_ept()
 	uint64_t addr;
         for (auto i = 0ULL; i < page_count; i++) {
             addr = i * page_size_bytes;
-            ept::identity_map_4k(*m_mem_map, addr);
+            ept::identity_map_2m(*m_mem_map, addr);
             auto &entry = m_mem_map->gpa_to_epte(addr); //leaf
 
             ept::epte::read_access::enable(entry);
