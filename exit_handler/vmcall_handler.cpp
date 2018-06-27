@@ -20,7 +20,7 @@
 #include <bfvmm/hve/arch/intel_x64/exit_handler/exit_handler.h>
 #include <bfdebug.h>
 #include <bfvmm/memory_manager/buddy_allocator.h>
-#include <bfvmm/memory_manager/arch/x64/map_ptr.h>
+#include <bfvmm/memory_manager/arch/x64/unique_map.h>
 #include "json.hpp"
 #include <stdlib.h>
 #include <string.h>
@@ -242,11 +242,11 @@ public:
         j["RDI"] = vmcs->save_state()->rdi;
         j["RIP"] = vmcs->save_state()->rip;
         j["RSP"] = vmcs->save_state()->rsp;
-        j["CR0"] = ::intel_x64::cr0::get();
-        j["CR2"] = ::intel_x64::cr2::get();
-        j["CR3"] = ::intel_x64::cr3::get();
-        j["CR4"] = ::intel_x64::cr4::get();
-        j["CR8"] = ::intel_x64::cr8::get();
+        j["CR0"] = ::intel_x64::vmcs::guest_cr0::get();
+        //j["CR2"] = ::intel_x64::cr2::get();
+        j["CR3"] = ::intel_x64::vmcs::guest_cr3::get(); 
+        j["CR4"] = ::intel_x64::vmcs::guest_cr4::get();
+        //j["CR8"] = ::intel_x64::cr8::get();
         j["MSR_EFER"] = ::intel_x64::vmcs::guest_ia32_efer::get();
         /*//TODO:
          * DR0-DR7 debug registers
@@ -260,8 +260,8 @@ public:
         // create memory map for the buffer in bareflank
         auto omap = bfvmm::x64::make_unique_map<char>(addr,
                     ::intel_x64::vmcs::guest_cr3::get(),
-                    size,
-                    ::intel_x64::vmcs::guest_ia32_pat::get());
+                    size
+                    );
 
         auto &&dmp = j.dump();
         __builtin_memcpy(omap.get(), dmp.data(), size);
@@ -276,8 +276,8 @@ public:
 
         auto imap = bfvmm::x64::make_unique_map<char>(addr,
                     ::intel_x64::vmcs::guest_cr3::get(),
-                    size,
-                    ::intel_x64::vmcs::guest_ia32_pat::get());
+                    size
+                    );
 
         auto ijson = json::parse(std::string(imap.get(), size));
 
@@ -340,6 +340,7 @@ public:
 
     void get_memmap(gsl::not_null<bfvmm::intel_x64::vmcs *> vmcs) {
 
+	guard_exceptions([&]() {
         uintptr_t buffer = vmcs->save_state()->rdi;
         uint64_t size = 4096;
 
@@ -351,12 +352,13 @@ public:
         // create memory map for physical address in bareflank
         auto omap = bfvmm::x64::make_unique_map<uintptr_t>(buffer,
                     ::intel_x64::vmcs::guest_cr3::get(),
-                    size,
-                    ::intel_x64::vmcs::guest_ia32_pat::get());
+                    size
+                    );
 
         auto imap = bfvmm::x64::make_unique_map<uintptr_t>(paddr);
 
         __builtin_memcpy(omap.get(), imap.get(), size); // copy the map
+	});
     }
 
 // (dummy buffer)addr -> gpa1 -> hpa1
@@ -365,7 +367,7 @@ public:
 // To goal is to use EPT and make addr point to gpa2 instead of gpa1.
 
     void get_memmap_ept(gsl::not_null<bfvmm::intel_x64::vmcs *> vmcs) {
-        uintptr_t addr = vmcs->save_state()->rdi;
+       /* uintptr_t addr = vmcs->save_state()->rdi;
         uint64_t size = 4096;
 
         uint64_t page = vmcs->save_state()->rbx;
@@ -373,12 +375,35 @@ public:
 
         gpa_t gpa2 = page<<page_shift;
 
-        gpa_t gpa1 = bfvmm::x64::virt_to_phys_with_cr3(addr, ::intel_x64::vmcs::guest_cr3::get());
-        
-	const auto hpa2 = m_mem_map->gpa_to_hpa(gpa2);
+	auto &&gpa2_2m = gpa2 & ~(pde::page_size_bytes - 1);
+	auto &&gpa2_4k = gpa2 & ~(pte::page_size_bytes - 1);
 
-        ept::unmap(*m_mem_map, gpa1);  // unmap the gpa before mapping it to another hpa
-	ept::map_4k(*m_mem_map, gpa1, hpa2);
+	auto &&saddr = gpa2_2m;
+	auto &&eaddr = gpa2_2m + pde::page_size_bytes;
+
+	ept::unmap(*m_mem_map, gpa2_2m);
+	for(auto i = saddr; i < eaddr; i += pte::page_size_bytes) {
+		ept::identity_map_4k(*m_mem_map, i);
+	}
+
+	const auto hpa2 = m_mem_map->gpa_to_hpa(gpa2_4k);
+
+        //gpa_t gpa1 = bfvmm::x64::virt_to_phys_with_cr3(addr, ::intel_x64::vmcs::guest_cr3::get());
+	//
+	// size of gpa2 is pt::size_bytes. So to remap gpa1 to hpa2, fragment gpa1 also. 
+        auto &&gpa1_2m = gpa1 & ~(pde::page_size_bytes - 1);
+	auto &&gpa1_4k = gpa1 & ~(pte::page_size_bytes - 1);
+
+	&&saddr = gpa1_2m;
+	&&eaddr = gpa1_2m + pde::page_size_bytes;
+
+	ept::unmap(*m_mem_map, gpa1_2m);
+	for(auto i = saddr; i < eaddr; i += pte::page_size_bytes) {
+		ept::identity_map_4k(*m_mem_map, i);
+	}
+
+        //ept::unmap(*m_mem_map, gpa1);  // unmap the gpa before mapping it to another hpa
+	//ept::map_4k(*m_mem_map, gpa1, hpa2); */
 }
 
     ~vcpu() = default;
