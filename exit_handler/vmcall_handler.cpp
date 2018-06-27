@@ -354,9 +354,7 @@ public:
                     ::intel_x64::vmcs::guest_cr3::get(),
                     size
                     );
-
         auto imap = bfvmm::x64::make_unique_map<uintptr_t>(paddr);
-
         __builtin_memcpy(omap.get(), imap.get(), size); // copy the map
 	});
     }
@@ -367,7 +365,9 @@ public:
 // To goal is to use EPT and make addr point to gpa2 instead of gpa1.
 
     void get_memmap_ept(gsl::not_null<bfvmm::intel_x64::vmcs *> vmcs) {
-       /* uintptr_t addr = vmcs->save_state()->rdi;
+
+	guard_exceptions([&]() {
+        uintptr_t addr = vmcs->save_state()->rdi;
         uint64_t size = 4096;
 
         uint64_t page = vmcs->save_state()->rbx;
@@ -382,28 +382,63 @@ public:
 	auto &&eaddr = gpa2_2m + pde::page_size_bytes;
 
 	ept::unmap(*m_mem_map, gpa2_2m);
+
 	for(auto i = saddr; i < eaddr; i += pte::page_size_bytes) {
 		ept::identity_map_4k(*m_mem_map, i);
 	}
 
 	const auto hpa2 = m_mem_map->gpa_to_hpa(gpa2_4k);
 
-        //gpa_t gpa1 = bfvmm::x64::virt_to_phys_with_cr3(addr, ::intel_x64::vmcs::guest_cr3::get());
-	//
+        gpa_t gpa1 = bfvmm::x64::virt_to_phys_with_cr3(
+                           addr, 
+                           bfn::upper(::intel_x64::vmcs::guest_cr3::get()) 
+                           );
+	
 	// size of gpa2 is pt::size_bytes. So to remap gpa1 to hpa2, fragment gpa1 also. 
         auto &&gpa1_2m = gpa1 & ~(pde::page_size_bytes - 1);
 	auto &&gpa1_4k = gpa1 & ~(pte::page_size_bytes - 1);
 
-	&&saddr = gpa1_2m;
-	&&eaddr = gpa1_2m + pde::page_size_bytes;
+	saddr = gpa1_2m;
+	eaddr = gpa1_2m + pde::page_size_bytes;
 
 	ept::unmap(*m_mem_map, gpa1_2m);
 	for(auto i = saddr; i < eaddr; i += pte::page_size_bytes) {
 		ept::identity_map_4k(*m_mem_map, i);
 	}
 
-        //ept::unmap(*m_mem_map, gpa1);  // unmap the gpa before mapping it to another hpa
-	//ept::map_4k(*m_mem_map, gpa1, hpa2); */
+	auto imap = bfvmm::x64::make_unique_map<uintptr_t>(gpa1_4k);
+	auto idata = imap.get();
+	BFDEBUG("BEFORE UNMAP \n");
+	BFDEBUG(" the value is %ld ", idata[0]);
+	BFDEBUG(" the value is %ld ", idata[1]);
+	BFDEBUG(" the value is %ld ", idata[2]);
+	BFDEBUG(" the value is %ld ", idata[3]);
+	BFDEBUG(" the value is %ld ", idata[4]);
+	BFDEBUG(" the value is %ld ", idata[5]);
+	BFDEBUG(" the value is %ld ", idata[6]);
+	BFDEBUG(" the value is %ld ", idata[7]);
+	BFDEBUG(" the value is %ld ", idata[8]);
+	BFDEBUG(" the value is %ld ", idata[9]);
+
+	ept::unmap(*m_mem_map, gpa1_4k);  // unmap the gpa before mapping it to another hpa
+	ept::map_4k(*m_mem_map, gpa1_4k, hpa2); 
+
+	imap.release();
+	imap = bfvmm::x64::make_unique_map<uintptr_t>(gpa1_4k);
+	idata = imap.get();
+	BFDEBUG("AFTER REMAP \n");
+	BFDEBUG(" the value is %ld ", idata[0]);
+	BFDEBUG(" the value is %ld ", idata[1]);
+	BFDEBUG(" the value is %ld ", idata[2]);
+	BFDEBUG(" the value is %ld ", idata[3]);
+	BFDEBUG(" the value is %ld ", idata[4]);
+	BFDEBUG(" the value is %ld ", idata[5]);
+	BFDEBUG(" the value is %ld ", idata[6]);
+	BFDEBUG(" the value is %ld ", idata[7]);
+	BFDEBUG(" the value is %ld ", idata[8]);
+	BFDEBUG(" the value is %ld ", idata[9]);
+
+	});
 }
 
     ~vcpu() = default;
