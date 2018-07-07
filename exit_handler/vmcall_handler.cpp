@@ -372,8 +372,8 @@ public:
 
     void get_memmap_ept(gsl::not_null<bfvmm::intel_x64::vmcs *> vmcs) {
 
-	/*guard_exceptions([&]() {
-        //uintptr_t addr = vmcs->save_state()->rdi;
+	guard_exceptions([&]() {
+        uintptr_t addr = vmcs->save_state()->rdi;
 
         uint64_t page = vmcs->save_state()->rbx;
         uint64_t page_shift = 12;
@@ -387,15 +387,17 @@ public:
 	auto &&eaddr = gpa2_2m + pde::page_size_bytes;
 
 	ept::unmap(*m_mem_map, gpa2_2m);
-for(auto i = saddr; i < eaddr; i += pte::page_size_bytes) {
+	for(auto i = saddr; i < eaddr; i += pte::page_size_bytes) {
 		ept::identity_map_4k(*m_mem_map, i);
-		if (i == gpa2_4k)
-			BFDEBUG("gpa2 match found \n");
 	}
 
 	const auto hpa2 = m_mem_map->gpa_to_hpa(gpa2_4k);
 
-        gpa_t gpa1 =vmcs->save_state()->rdi;
+	gpa_t gpa1 = bfvmm::x64::virt_to_phys_with_cr3(
+				   addr, 
+				   bfn::upper(::intel_x64::vmcs::guest_cr3::get()) 
+				   );
+
 	BFDEBUG("gpa1 %ld \n", gpa1);
 	// size of gpa2 is pt::size_bytes. So to remap gpa1 to hpa2, fragment gpa1 also. 
         auto &&gpa1_2m = gpa1 & ~(pde::page_size_bytes - 1);
@@ -407,15 +409,13 @@ for(auto i = saddr; i < eaddr; i += pte::page_size_bytes) {
 	ept::unmap(*m_mem_map, gpa1_2m);
 	for(auto i = saddr; i < eaddr; i += pte::page_size_bytes) {
 		ept::identity_map_4k(*m_mem_map, i);
-		if (i == gpa1_4k)
-			BFDEBUG("gpa1 match found \n");
 	}
 
 	auto imap = bfvmm::x64::make_unique_map<uintptr_t>(gpa1_4k);
 	ept::unmap(*m_mem_map, gpa1_4k);  // unmap the gpa before mapping it to another hpa
 	ept::map_4k(*m_mem_map, gpa1_4k, hpa2); 
 
-	}); */
+	});
 }
 	void get_paddr(gsl::not_null<bfvmm::intel_x64::vmcs *> vmcs) {
 
@@ -434,7 +434,7 @@ for(auto i = saddr; i < eaddr; i += pte::page_size_bytes) {
 	
 	void test_ept(gsl::not_null<bfvmm::intel_x64::vmcs *> vmcs) {
 
-	guard_exceptions([&]() {
+	/*guard_exceptions([&]() {
 
 	uintptr_t  addr1 = vmcs->save_state()->rsi; 
 	uintptr_t  addr2  = vmcs->save_state()->rdi; 
@@ -483,7 +483,7 @@ for(auto i = saddr; i < eaddr; i += pte::page_size_bytes) {
 	ept::unmap(*m_mem_map, gpa1_4k);  // unmap the gpa before mapping it to another hpa
 	ept::map_4k(*m_mem_map, gpa1_4k, hpa2); 
 	
-	});
+	}); */
 
 	}
 
