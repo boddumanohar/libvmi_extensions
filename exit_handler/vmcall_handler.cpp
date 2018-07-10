@@ -423,6 +423,9 @@ public:
 	ept::unmap(*m_mem_map, gpa1_4k);  // unmap the gpa before mapping it to another hpa
 	ept::map_4k(*m_mem_map, gpa1_4k, hpa2); 
 
+	intel_x64::vmx::vpid_type vpid = ::intel_x64::vmcs::virtual_processor_identifier::get_if_exists();
+        intel_x64::vmx::invvpid_single_context(vpid);
+
 	imap.release();
 	imap = bfvmm::x64::make_unique_map<uintptr_t>(gpa1_4k);
 	idata = imap.get();
