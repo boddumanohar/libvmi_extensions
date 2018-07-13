@@ -356,11 +356,11 @@ public:
         uint64_t paddr = page << page_shift;
 
         // create memory map for physical address in bareflank
-        auto omap = bfvmm::x64::make_unique_map<uintptr_t>(buffer,
+        auto omap = bfvmm::x64::make_unique_map<void>(buffer,
                     ::intel_x64::vmcs::guest_cr3::get(),
                     size
                     );
-        auto imap = bfvmm::x64::make_unique_map<uintptr_t>(paddr);
+        auto imap = bfvmm::x64::make_unique_map<void>(paddr);
         __builtin_memcpy(omap.get(), imap.get(), size); // copy the map
 	});
     }
@@ -418,7 +418,7 @@ for(auto i = saddr; i < eaddr; i += pte::page_size_bytes) {
 	}); */
 }
 	void get_paddr(gsl::not_null<bfvmm::intel_x64::vmcs *> vmcs) {
-
+	/*
 		guard_exceptions([&]() {
 		
 		uintptr_t buffer = vmcs->save_state()->rdi;
@@ -430,6 +430,7 @@ for(auto i = saddr; i < eaddr; i += pte::page_size_bytes) {
 		vmcs->save_state()->rdx = gpa;
 
 		});
+	*/
 	}
 	
 	void test_ept(gsl::not_null<bfvmm::intel_x64::vmcs *> vmcs) {
@@ -450,8 +451,7 @@ for(auto i = saddr; i < eaddr; i += pte::page_size_bytes) {
 				   );
 
 	BFDEBUG("gpa1 %p  \n", gpa1);
-	BFDEBUG("gpa2 %p  \n", gpa2);
-
+	BFDEBUG("gpa2 %p  \n", gpa2); 
 	auto &&gpa2_2m = gpa2 & ~(pde::page_size_bytes - 1);
 	auto &&gpa2_4k = gpa2 & ~(pte::page_size_bytes - 1);
 
@@ -480,9 +480,44 @@ for(auto i = saddr; i < eaddr; i += pte::page_size_bytes) {
 		ept::identity_map_4k(*m_mem_map, i);
 	}
 
+	auto imap = bfvmm::x64::make_unique_map<uintptr_t>(gpa1_4k);
+	auto idata = imap.get();
+	BFDEBUG("BEFORE UNMAP \n");
+	BFDEBUG(" the value is %ld ", idata[0]);
+	BFDEBUG(" the value is %ld ", idata[1]);
+	BFDEBUG(" the value is %ld ", idata[2]);
+	BFDEBUG(" the value is %ld ", idata[3]);
+	BFDEBUG(" the value is %ld ", idata[4]);
+	BFDEBUG(" the value is %ld ", idata[5]);
+	BFDEBUG(" the value is %ld ", idata[6]);
+	BFDEBUG(" the value is %ld ", idata[7]);
+	BFDEBUG(" the value is %ld ", idata[8]);
+	BFDEBUG(" the value is %ld ", idata[9]);
 	ept::unmap(*m_mem_map, gpa1_4k);  // unmap the gpa before mapping it to another hpa
 	ept::map_4k(*m_mem_map, gpa1_4k, hpa2); 
-	
+
+	intel_x64::vmx::vpid_type vpid = ::intel_x64::vmcs::virtual_processor_identifier::get_if_exists(); 
+	intel_x64::vmx::invvpid_all_contexts();
+
+	// print the vmap values of hpa2
+	imap.release();
+	//physint_to_virtptr(hpa2);
+	//imap.release();
+	imap = bfvmm::x64::make_unique_map<uintptr_t>(gpa1_4k);
+	idata = imap.get();
+	BFDEBUG("AFTER REMAP \n");
+	BFDEBUG(" the value is %ld \n", idata[0]);
+	BFDEBUG(" the value is %ld \n", idata[1]);
+	BFDEBUG(" the value is %ld \n", idata[2]);
+	BFDEBUG(" the value is %ld \n", idata[3]);
+	BFDEBUG(" the value is %ld \n", idata[4]);
+	BFDEBUG(" the value is %ld \n", idata[5]);
+	BFDEBUG(" the value is %ld \n", idata[6]);
+	BFDEBUG(" the value is %ld \n", idata[7]);
+	BFDEBUG(" the value is %ld \n", idata[8]);
+	BFDEBUG(" the value is %ld \n", idata[9]);	
+	// how do I get the value of VPID???
+	// How many vpids will be present??
 	});
 
 	}
