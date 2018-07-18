@@ -20,7 +20,7 @@
 #include <bfvmm/hve/arch/intel_x64/exit_handler/exit_handler.h>
 #include <bfdebug.h>
 #include <bfvmm/memory_manager/buddy_allocator.h>
-#include <bfvmm/memory_manager/arch/x64/map_ptr.h>
+#include <bfvmm/memory_manager/arch/x64/unique_map.h>
 #include "json.hpp"
 #include <stdlib.h>
 #include <string.h>
@@ -114,8 +114,7 @@ public:
         // create memory map for the buffer in bareflank
         auto omap = bfvmm::x64::make_unique_map<char>(addr,
                     ::intel_x64::vmcs::guest_cr3::get(),
-                    size,
-                    ::intel_x64::vmcs::guest_ia32_pat::get());
+                    size);
 
         auto &&dmp = j.dump();
         __builtin_memcpy(omap.get(), dmp.data(), size);
@@ -130,8 +129,7 @@ public:
 
         auto imap = bfvmm::x64::make_unique_map<char>(addr,
                     ::intel_x64::vmcs::guest_cr3::get(),
-                    size,
-                    ::intel_x64::vmcs::guest_ia32_pat::get());
+                    size);
 
         auto ijson = json::parse(std::string(imap.get(), size));
 
@@ -205,8 +203,7 @@ public:
         // create memory map for physical address in bareflank
         auto omap = bfvmm::x64::make_unique_map<uintptr_t>(buffer,
                     ::intel_x64::vmcs::guest_cr3::get(),
-                    size,
-                    ::intel_x64::vmcs::guest_ia32_pat::get());
+                    size);
 
         auto imap = bfvmm::x64::make_unique_map<uintptr_t>(paddr);
 
@@ -233,8 +230,7 @@ public:
 
         auto hva1 = bfvmm::x64::make_unique_map<void>(addr,
                     ::intel_x64::vmcs::guest_cr3::get(),
-                    size,
-                    ::intel_x64::vmcs::guest_ia32_pat::get());
+                    size);
 
         auto hva2 = bfvmm::x64::make_unique_map<void>(gpa2);
 
