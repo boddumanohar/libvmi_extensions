@@ -24,165 +24,37 @@
 #include "json.hpp"
 #include <stdlib.h>
 #include <string.h>
-#include <eapis/hve/arch/intel_x64/hve.h>
-#include <eapis/hve/arch/intel_x64/vic.h>
-#include <eapis/hve/arch/intel_x64/ept.h>
-#include <eapis/vcpu/arch/intel_x64/vcpu.h>
+#include <eapis/hve/arch/intel_x64/vcpu.h>
 
 using nlohmann::json;
 using namespace eapis::intel_x64;
-using namespace eapis::intel_x64::ept;
-
-namespace ept = eapis::intel_x64::ept;
-namespace vmcs = ::intel_x64::vmcs;
-
-const uint64_t page_size_bytes = 0x200000ULL;
-const uint64_t page_count = 0x8000ULL;
 
 namespace libvmi
 {
 
+gsl::not_null<ept::mmap *>
+guest_mmap()
+{
+    bfignored(g_mm);
+    static std::unique_ptr<ept::mmap> m_guest_mmap{};
+
+    if (m_guest_mmap) {
+        return m_guest_mmap.get();
+    }
+
+    m_guest_mmap = std::make_unique<ept::mmap>();
+
+    ept::identify_map(
+        m_guest_mmap.get(),
+        0,
+        MAX_PHYS_ADDR
+    );
+
+    return m_guest_mmap.get();
+}
 
 class vcpu : public eapis::intel_x64::vcpu
 {
-private:
-
-std::unique_ptr<ept::memory_map> m_mem_map;
-bool m_have_trapped_write_violation = false;
-
-void enable_ept()
-    {
-        m_mem_map = std::make_unique<ept::memory_map>();
-
-	uint64_t addr;
-        for (auto i = 0ULL; i < page_count; i++) {
-            addr = i * page_size_bytes;
-            ept::identity_map_2m(*m_mem_map, addr);
-            auto &entry = m_mem_map->gpa_to_epte(addr); //leaf
-
-            ept::epte::read_access::enable(entry);
-            ept::epte::write_access::enable(entry);
-            ept::epte::execute_access::disable(entry);
-        }
-
-        auto eptp = ept::eptp(*m_mem_map);
-        vmcs::ept_pointer::set(eptp);
-        vmcs::secondary_processor_based_vm_execution_controls::enable_ept::enable();
-    }
-
-void register_ept_handlers()
-    {
-        auto hve = this->hve();
-
-        hve->add_ept_read_violation_handler(
-            eapis::intel_x64::ept_violation::handler_delegate_t::create<vcpu, &vcpu::handle_read_violation>(this)
-        );
-
-        hve->add_ept_write_violation_handler(
-            eapis::intel_x64::ept_violation::handler_delegate_t::create<vcpu, &vcpu::handle_write_violation>(this)
-        );
-
-        hve->add_ept_execute_violation_handler(
-            eapis::intel_x64::ept_violation::handler_delegate_t::create<vcpu, &vcpu::handle_execute_violation>(this)
-        );
-
-        hve->add_ept_misconfiguration_handler(
-            eapis::intel_x64::ept_misconfiguration::handler_delegate_t::create<vcpu, &vcpu::handle_ept_misconfiguration>(this)
-        );
-
-        hve->ept_misconfiguration()->enable_log();
-        hve->ept_violation()->enable_log();
-    }
-
-    bool handle_ept_misconfiguration(
-        gsl::not_null<vmcs_t *> vmcs,
-        eapis::intel_x64::ept_misconfiguration::info_t &info)
-    {
-        bfignored(vmcs);
-        bfignored(info);
-
-        info.ignore_advance = true;
-        vmcs::secondary_processor_based_vm_execution_controls::enable_ept::disable();
-
-        for (auto i = 0ULL; i < page_count; i++) {
-            auto addr = i * page_size_bytes;
-            auto &entry = m_mem_map->gpa_to_epte(addr);
-
-            ept::epte::read_access::enable(entry);
-            ept::epte::write_access::enable(entry);
-            ept::epte::execute_access::disable(entry);
-        }
-
-        vmcs::secondary_processor_based_vm_execution_controls::enable_ept::enable();
-
-        return true;
-    }
-
-    bool handle_read_violation(
-        gsl::not_null<bfvmm::intel_x64::vmcs *> vmcs,
-        eapis::intel_x64::ept_violation::info_t &info)
-    {
-        bfignored(vmcs);
-        bfignored(info);
-
-        info.ignore_advance = true;
-        vmcs::secondary_processor_based_vm_execution_controls::enable_ept::disable();
-
-        return true;
-    }
-
-    bool handle_write_violation(
-        gsl::not_null<bfvmm::intel_x64::vmcs *> vmcs,
-        eapis::intel_x64::ept_violation::info_t &info)
-    {
-        bfignored(vmcs);
-        bfignored(info);
-
-        if (m_have_trapped_write_violation) {
-            return true;
-        }
-
-        m_have_trapped_write_violation = true;
-        info.ignore_advance = true;
-        vmcs::secondary_processor_based_vm_execution_controls::enable_ept::disable();
-
-        for (auto i = 0ULL; i < page_count; i++) {
-            auto addr = i * page_size_bytes;
-            auto &entry = m_mem_map->gpa_to_epte(addr);
-
-            ept::epte::read_access::disable(entry);
-            ept::epte::write_access::disable(entry);
-            ept::epte::execute_access::enable(entry);
-        }
-
-        vmcs::secondary_processor_based_vm_execution_controls::enable_ept::enable();
-
-        return true;
-    }
-
-    bool handle_execute_violation(
-        gsl::not_null<bfvmm::intel_x64::vmcs *> vmcs,
-        eapis::intel_x64::ept_violation::info_t &info)
-    {
-        bfignored(vmcs);
-        bfignored(info);
-
-        info.ignore_advance = true;
-        vmcs::secondary_processor_based_vm_execution_controls::enable_ept::disable();
-
-        for (auto i = 0ULL; i < page_count; i++) {
-            auto addr = i * page_size_bytes;
-            auto &entry = m_mem_map->gpa_to_epte(addr);
-
-            ept::epte::read_access::enable(entry);
-            ept::epte::write_access::disable(entry);
-            ept::epte::execute_access::enable(entry);
-        }
-
-        vmcs::secondary_processor_based_vm_execution_controls::enable_ept::enable();
-
-        return true;
-    }
 
 public:
 
@@ -191,8 +63,10 @@ public:
 
     vcpu(vcpuid::type id) : eapis::intel_x64::vcpu{id}
     {
-	this->register_ept_handlers();
-	this->enable_ept();
+
+	this->set_eptp(
+            guest_mmap()
+        );
 
         exit_handler()->add_handler(
             intel_x64::vmcs::exit_reason::basic_exit_reason::vmcall,
@@ -211,21 +85,13 @@ public:
         else if(id == 2) {
             get_register_data(vmcs);
         }
-        else if (id == 3) {
-            set_register(vmcs);
-        }
-        else if (id == 4) {
-            get_memmap(vmcs);
+        else if(id == 3) {
+            reremap_ept(vmcs);
         }
         else if (id == 5) {
             get_memmap_ept(vmcs);
         }
-	else if (id == 6) {
-            get_paddr(vmcs);
-        }
-        else if (id == 7) {
-            test_ept(vmcs);
-        }
+	
 	return advance(vmcs);
     }
 
@@ -249,10 +115,8 @@ public:
         j["RIP"] = vmcs->save_state()->rip;
         j["RSP"] = vmcs->save_state()->rsp;
         j["CR0"] = ::intel_x64::vmcs::guest_cr0::get();
-        //j["CR2"] = ::intel_x64::cr2::get();
         j["CR3"] = ::intel_x64::vmcs::guest_cr3::get(); 
         j["CR4"] = ::intel_x64::vmcs::guest_cr4::get();
-        //j["CR8"] = ::intel_x64::cr8::get();
         j["MSR_EFER"] = ::intel_x64::vmcs::guest_ia32_efer::get();
         /*//TODO:
          * DR0-DR7 debug registers
@@ -275,95 +139,6 @@ public:
         bfdebug_info(0, "get-regsters vmcall handled");
     }
 
-    void set_register(gsl::not_null<bfvmm::intel_x64::vmcs *> vmcs) {
-
-        uintptr_t addr = vmcs->save_state()->rdi;
-        uint64_t size = vmcs->save_state()->rsi;
-
-        auto imap = bfvmm::x64::make_unique_map<char>(addr,
-                    ::intel_x64::vmcs::guest_cr3::get(),
-                    size
-                    );
-
-        auto ijson = json::parse(std::string(imap.get(), size));
-
-        for (json::iterator it = ijson.begin(); it != ijson.end(); ++it) {
-            if (it.key() == "RDX")
-                vmcs->save_state()->rdx = it.value();
-            if (it.key() == "RAX")
-                vmcs->save_state()->rax = it.value();
-            if (it.key() == "RBX")
-                vmcs->save_state()->rbx = it.value();
-            if (it.key() == "RCX")
-                vmcs->save_state()->rcx = it.value();
-            if (it.key() == "R08")
-                vmcs->save_state()->r08 = it.value();
-            if (it.key() == "R09")
-                vmcs->save_state()->r09 = it.value();
-            if (it.key() == "R10")
-                vmcs->save_state()->r10 = it.value();
-            if (it.key() == "R11")
-                vmcs->save_state()->r11 = it.value();
-            if (it.key() == "R12")
-                vmcs->save_state()->r12 = it.value();
-            if (it.key() == "R13")
-                vmcs->save_state()->r13 = it.value();
-            if (it.key() == "R14")
-                vmcs->save_state()->r14 = it.value();
-            if (it.key() == "R15")
-                vmcs->save_state()->r15 = it.value();
-            if (it.key() == "RBP")
-                vmcs->save_state()->rbp = it.value();
-            if (it.key() == "RSI")
-                vmcs->save_state()->rsi = it.value();
-            if (it.key() == "RDI")
-                vmcs->save_state()->rdi = it.value();
-            if (it.key() == "RIP")
-                vmcs->save_state()->rip = it.value();
-            if (it.key() == "RSP")
-                vmcs->save_state()->rsp = it.value();
-            /*if (it.key() == "CR0")
-            ::intel_x64::cr0::set(it.value());
-             if (it.key() == "CR2")
-            ::intel_x64::cr2::set(it.value());
-             if (it.key() == "CR3")
-            ::intel_x64::cr3::set(it.value());
-             if (it.key() == "CR4")
-            ::intel_x64::cr4::set(it.value());
-             if (it.key() == "CR8")
-            		::intel_x64::cr8::set(it.value()); */
-            else
-                vmcs->save_state()->rdx = -1;
-
-        }
-
-        bfdebug_info(0, "set-register vmcall handled");
-    }
-
-    //void set_register(gsl::not_null<bfvmm::intel_x64::vmcs *> vmcs) {
-    //
-    //}
-
-    void get_memmap(gsl::not_null<bfvmm::intel_x64::vmcs *> vmcs) {
-
-	guard_exceptions([&]() {
-        uintptr_t buffer = vmcs->save_state()->rdi;
-        uint64_t size = 4096;
-
-        uint64_t page = vmcs->save_state()->rbx;
-        uint64_t page_shift = 12;
-
-        uint64_t paddr = page << page_shift;
-
-        // create memory map for physical address in bareflank
-        auto omap = bfvmm::x64::make_unique_map<uintptr_t>(buffer,
-                    ::intel_x64::vmcs::guest_cr3::get(),
-                    size
-                    );
-        auto imap = bfvmm::x64::make_unique_map<uintptr_t>(paddr);
-        __builtin_memcpy(omap.get(), imap.get(), size); // copy the map
-	});
-    }
 
 // (dummy buffer)addr -> gpa1 -> hpa1
 //                       gpa2 -> hpa2
@@ -373,119 +148,98 @@ public:
     void get_memmap_ept(gsl::not_null<bfvmm::intel_x64::vmcs *> vmcs) {
 
 	guard_exceptions([&]() {
-        uintptr_t addr = vmcs->save_state()->rdi;
 
+        uint64_t addr = vmcs->save_state()->rdi;
         uint64_t page = vmcs->save_state()->rbx;
-        uint64_t page_shift = 12;
 
-        gpa_t gpa2 = page<<page_shift;
+        auto gpa2 = page<<12;
 
-	auto &&gpa2_2m = gpa2 & ~(pde::page_size_bytes - 1);
-	auto &&gpa2_4k = gpa2 & ~(pte::page_size_bytes - 1);
+	auto cr3 = intel_x64::vmcs::guest_cr3::get();
+        auto gpa1 = bfvmm::x64::virt_to_phys_with_cr3(addr, cr3);
 
-	auto &&saddr = gpa2_2m;
-	auto &&eaddr = gpa2_2m + pde::page_size_bytes;
+        auto gpa1_2m = bfn::upper(gpa1, ::intel_x64::ept::pd::from);
+        auto gpa1_4k = bfn::upper(gpa1, ::intel_x64::ept::pt::from);
+        auto gpa2_4k = bfn::upper(gpa2, ::intel_x64::ept::pt::from);
 
-	ept::unmap(*m_mem_map, gpa2_2m);
-	for(auto i = saddr; i < eaddr; i += pte::page_size_bytes) {
-		ept::identity_map_4k(*m_mem_map, i);
-	}
+        expects(guest_mmap()->is_2m(gpa1_2m)); // failed
+        guest_mmap()->unmap(gpa1_2m);
 
-	const auto hpa2 = m_mem_map->gpa_to_hpa(gpa2_4k);
+	BFDEBUG("tring identify map \n");
+        ept::identify_map_4k(
+            guest_mmap(),
+            gpa1_2m,
+            gpa1_2m + ::intel_x64::ept::pd::page_size
+        );
 
-	gpa_t gpa1 = bfvmm::x64::virt_to_phys_with_cr3(
-				   addr, 
-				   bfn::upper(::intel_x64::vmcs::guest_cr3::get()) 
-				   );
+	BFDEBUG("done identify map \n");
+        auto &pte = guest_mmap()->entry(gpa1_4k);
+        ::intel_x64::ept::pt::entry::phys_addr::set(pte, gpa2_4k);
+	::intel_x64::vmx::invept_global(); 
+	//BFDEBUG("tring identify map \n");
+	/*ept::identify_map_2m(
+            guest_mmap(),
+            gpa1_2m,
+            gpa1_2m + ::intel_x64::ept::pd::page_size
+        );*/
 
-	BFDEBUG("gpa1 %ld \n", gpa1);
-	// size of gpa2 is pt::size_bytes. So to remap gpa1 to hpa2, fragment gpa1 also. 
-        auto &&gpa1_2m = gpa1 & ~(pde::page_size_bytes - 1);
-	auto &&gpa1_4k = gpa1 & ~(pte::page_size_bytes - 1);
-
-	saddr = gpa1_2m;
-	eaddr = gpa1_2m + pde::page_size_bytes;
-
-	ept::unmap(*m_mem_map, gpa1_2m);
-	for(auto i = saddr; i < eaddr; i += pte::page_size_bytes) {
-		ept::identity_map_4k(*m_mem_map, i);
-	}
-
-	auto imap = bfvmm::x64::make_unique_map<uintptr_t>(gpa1_4k);
-	ept::unmap(*m_mem_map, gpa1_4k);  // unmap the gpa before mapping it to another hpa
-	ept::map_4k(*m_mem_map, gpa1_4k, hpa2); 
-
+	BFDEBUG("1 done \n");
 	});
 }
-	void get_paddr(gsl::not_null<bfvmm::intel_x64::vmcs *> vmcs) {
 
-		guard_exceptions([&]() {
-		
-		uintptr_t buffer = vmcs->save_state()->rdi;
-		gpa_t gpa = bfvmm::x64::virt_to_phys_with_cr3(
-				   buffer, 
-				   bfn::upper(::intel_x64::vmcs::guest_cr3::get()) 
-				   );
+void reremap_ept(gsl::not_null<bfvmm::intel_x64::vmcs *> vmcs) {
 
-		vmcs->save_state()->rdx = gpa;
+	guard_exceptions([&]() {
 
-		});
+	BFDEBUG("starting 2\n");
+        uint64_t addr = vmcs->save_state()->rdi;
+        uint64_t page = vmcs->save_state()->rbx;
+
+        auto gpa2 = page<<12;
+
+	auto cr3 = intel_x64::vmcs::guest_cr3::get();
+        auto gpa1 = bfvmm::x64::virt_to_phys_with_cr3(addr, cr3);
+
+        auto gpa1_2m = bfn::upper(gpa1, ::intel_x64::ept::pd::from);
+        auto gpa1_4k = bfn::upper(gpa1, ::intel_x64::ept::pt::from);
+        auto gpa2_4k = bfn::upper(gpa2, ::intel_x64::ept::pt::from);
+
+	guest_mmap()->unmap(gpa1_4k);
+
+	BFDEBUG("2 doing identitymap \n");
+       	ept::identify_map_4k(
+            guest_mmap(),
+            gpa1_4k,
+            gpa1_4k + ::intel_x64::ept::pt::page_size
+        );
+
+	//guest_mmap()->map_4k(gpa1_4k, gpa1_4k, attr, cache);
+
+	auto saddr = gpa1_4k;
+	auto eaddr = gpa1_4k + ::intel_x64::ept::pd::page_size;
+	auto psize = 4096; /*::intel_x64::ept::pt::page_size;*/
+
+	expects(bfn::lower(gpa1_4k, ::intel_x64::ept::pd::from) == 0); //failed 
+	expects(guest_mmap()->is_4k(gpa1_4k));
+
+	expects(bfn::lower(saddr, ::intel_x64::ept::pt::from) == 0);
+	expects(bfn::lower(eaddr, ::intel_x64::ept::pt::from) == 0);
+
+
+	for(auto i=saddr; i<eaddr; i+=psize){
+		guest_mmap()->release(i);
 	}
 	
-	void test_ept(gsl::not_null<bfvmm::intel_x64::vmcs *> vmcs) {
+	ept::identify_map_2m(
+            guest_mmap(),
+            gpa1_2m,
+            gpa1_2m + ::intel_x64::ept::pd::page_size
+        );
 
-	/*guard_exceptions([&]() {
+	//guest_mmap()->map_2m(gpa1_4k, gpa1_4k, attr, cache);
 
-	uintptr_t  addr1 = vmcs->save_state()->rsi; 
-	uintptr_t  addr2  = vmcs->save_state()->rdi; 
-
-	gpa_t gpa1 = bfvmm::x64::virt_to_phys_with_cr3(
-				   addr1, 
-				   bfn::upper(::intel_x64::vmcs::guest_cr3::get()) 
-				   );
-
-	gpa_t gpa2 = bfvmm::x64::virt_to_phys_with_cr3(
-				   addr2, 
-				   bfn::upper(::intel_x64::vmcs::guest_cr3::get()) 
-				   );
-
-	BFDEBUG("gpa1 %p  \n", gpa1);
-	BFDEBUG("gpa2 %p  \n", gpa2);
-
-	auto &&gpa2_2m = gpa2 & ~(pde::page_size_bytes - 1);
-	auto &&gpa2_4k = gpa2 & ~(pte::page_size_bytes - 1);
-
-	auto &&saddr = gpa2_2m;
-	auto &&eaddr = gpa2_2m + pde::page_size_bytes;
-
-	ept::unmap(*m_mem_map, gpa2_2m);
-
-	
-	for(auto i = saddr; i < eaddr; i += pte::page_size_bytes) {
-		ept::identity_map_4k(*m_mem_map, i);
-	}
-
-	const auto hpa2 = m_mem_map->gpa_to_hpa(gpa2_4k);
-
-	BFDEBUG("done remapping gpa2 \n"); 
-	// size of gpa2 is pt::size_bytes. So to remap gpa1 to hpa2, fragment gpa1 also. 
-        auto &&gpa1_2m = gpa1 & ~(pde::page_size_bytes - 1);
-	auto &&gpa1_4k = gpa1 & ~(pte::page_size_bytes - 1);
-
-	saddr = gpa1_2m;
-	eaddr = gpa1_2m + pde::page_size_bytes;
-
-	ept::unmap(*m_mem_map, gpa1_2m);
-	for(auto i = saddr; i < eaddr; i += pte::page_size_bytes) {
-		ept::identity_map_4k(*m_mem_map, i);
-	}
-
-	ept::unmap(*m_mem_map, gpa1_4k);  // unmap the gpa before mapping it to another hpa
-	ept::map_4k(*m_mem_map, gpa1_4k, hpa2); 
-	
-	}); */
-
-	}
+	BFDEBUG("2 done \n");
+	});
+}
 
     ~vcpu() = default;
 };
