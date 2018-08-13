@@ -164,28 +164,20 @@ public:
         expects(guest_mmap()->is_2m(gpa1_2m)); // failed
         guest_mmap()->unmap(gpa1_2m);
 
-	BFDEBUG("tring identify map \n");
         ept::identify_map_4k(
             guest_mmap(),
             gpa1_2m,
             gpa1_2m + ::intel_x64::ept::pd::page_size
         );
 
-	BFDEBUG("done identify map \n");
         auto &pte = guest_mmap()->entry(gpa1_4k);
         ::intel_x64::ept::pt::entry::phys_addr::set(pte, gpa2_4k);
 	::intel_x64::vmx::invept_global(); 
-	//BFDEBUG("tring identify map \n");
-	/*ept::identify_map_2m(
-            guest_mmap(),
-            gpa1_2m,
-            gpa1_2m + ::intel_x64::ept::pd::page_size
-        );*/
 
-	BFDEBUG("1 done \n");
 	});
 }
 
+// reverse the remap
 void reremap_ept(gsl::not_null<bfvmm::intel_x64::vmcs *> vmcs) {
 
 	guard_exceptions([&]() {
